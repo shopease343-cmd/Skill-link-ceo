@@ -1,3 +1,10 @@
+-- Compatibility/auth migration. Safe to run after 001_initial_schema.sql.
+alter table public.profiles add column if not exists username text;
+alter table public.profiles add column if not exists phone text;
+alter table public.profiles add column if not exists avatar_url text;
+create unique index if not exists profiles_username_unique_idx on public.profiles(username) where username is not null;
+drop trigger if exists on_auth_user_created on auth.users;
+
 -- SkillLink profile/auth compatibility migration
 -- Safe for the current public.profiles schema:
 -- id, username, full_name, phone, avatar_url, role, status,
