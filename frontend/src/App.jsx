@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { api } from './services/api'
 
@@ -125,33 +125,29 @@ function BuyButton({kind,id,name,label='Buy now',purpose='purchase'}){
 }
 
 function PackageGrid(){
-  return <div className="package-grid">{packages.map(p=><article className={`package ${p.tone}`} key={p.name}>
-    <div className="package-image-link" aria-label={`Open ${p.name} package`}>
-      <img className="package-image" src={p.image} alt={`${p.name} — ${p.sub}`} loading="lazy"/>
-    </div>
-    <div className="package-content"><div className="package-icon">{p.icon}</div><h3>{p.name}</h3><p>{p.sub}</p><strong>₹{p.price.toLocaleString('en-IN')}</strong>
-    <ul>{p.items.map(x=><li key={x}>✓ {x}</li>)}</ul><BuyButton kind="package" name={p.name} label="Get Started →"/></div>
-  </article>)}</div>
+  const [items,setItems]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(true)
+  useEffect(()=>{let cancelled=false;(async()=>{try{const r=await api('/packages');if(!cancelled)setItems(r.packages||[])}catch(e){if(!cancelled)setError(e.message)}finally{if(!cancelled)setLoading(false)}})();return()=>{cancelled=true}},[])
+  const meta={Aarambh:packages[0],Udaan:packages[1],Pragati:packages[2],Brahmastra:packages[3],Shikhar:packages[4]}
+  if(loading)return <div className="ceo-loading">Loading live packages…</div>
+  if(error)return <div className="notice">{error}</div>
+  if(!items.length)return <div className="empty">No active packages are currently published.</div>
+  return <div className="package-grid">{items.map(p=>{const m=meta[p.name]||{};return <article className={`package ${m.tone||''}`} key={p.id}><div className="package-image-link"><img className="package-image" src={m.image||'/assets/skilllink-loading.jpg'} alt={`${p.name} — ${p.subtitle||''}`} loading="lazy"/></div><div className="package-content"><div className="package-icon">{m.icon||'✦'}</div><h3>{p.name}</h3><p>{p.subtitle||p.description||''}</p><strong>₹{Number(p.base_price??p.price??0).toLocaleString('en-IN')}</strong><ul>{(m.items||[]).map(x=><li key={x}>✓ {x}</li>)}</ul><BuyButton kind="package" id={p.id} name={p.name} label="Get Started →"/></div></article>})}</div>
 }
-
 function MasterGrid(){
-  const masters=[
-    {name:'Instagram Growth Strategies 2025',image:'/assets/master-instagram.png',cat:'Digital Marketing',price:'₹99',time:'7:00 PM'},
-    {name:'Full Stack Web Development Roadmap',image:'/assets/master-fullstack.png',cat:'Web Development',price:'₹199',time:'6:00 PM'},
-    {name:'Practical AI Tools for Creators',image:'/assets/master-ai.png',cat:'AI & Tech',price:'₹99',time:'7:00 PM'},
-    {name:'Freelancing to Full-Time Business',image:'/assets/master-freelancing.png',cat:'Business & Finance',price:'₹199',time:'7:00 PM'}
-  ]
-  return <div className="master-grid">{masters.map((m,i)=><article className="master master-image-card" key={m.name}>
-    <Link to="/login" className="master-image-link"><img src={m.image} alt={m.name} loading="lazy"/></Link>
-    <div className="master-info"><span className="live">Live Masterclass</span><small>{m.cat}</small><h3>{m.name}</h3><p>◷ Daily · {m.time}</p><footer><b>{m.price}</b><Link to="/login">Join Now →</Link></footer></div>
-  </article>)}</div>
+  const [items,setItems]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(true)
+  useEffect(()=>{let cancelled=false;(async()=>{try{const r=await api('/masterclasses');if(!cancelled)setItems(r.masterclasses||[])}catch(e){if(!cancelled)setError(e.message)}finally{if(!cancelled)setLoading(false)}})();return()=>{cancelled=true}},[])
+  if(loading)return <div className="ceo-loading">Loading live masterclasses…</div>
+  if(error)return <div className="notice">{error}</div>
+  if(!items.length)return <div className="empty">No published masterclasses are currently available.</div>
+  return <div className="master-grid">{items.map((m,i)=><article className="master master-image-card" key={m.id}><div className="master-image-link"><img src={m.thumbnail_url||`/assets/master-${['instagram','fullstack','ai','freelancing'][i%4]}.png`} alt={m.title} loading="lazy"/></div><div className="master-info"><span className="live">{m.mode==='recorded'?'Recorded Masterclass':'Live Masterclass'}</span><small>SkillLink Learning</small><h3>{m.title}</h3><p>◷ {m.scheduled_at?new Date(m.scheduled_at).toLocaleString('en-IN'):'Schedule to be announced'}</p><footer><b>₹{Number(m.price||0).toLocaleString('en-IN')}</b>{m.price>0?<BuyButton kind="masterclass" id={m.id} label="Join Now →"/>:<span>Free</span>}</footer></div></article>)}</div>
 }
-
 function Courses(){
   const [courses,setCourses]=useState([])
   const [error,setError]=useState('')
+  const [query,setQuery]=useState('')
+  const [category,setCategory]=useState('all')
+  const [sort,setSort]=useState('newest')
   useEffect(()=>{api('/courses').then(x=>setCourses(x.courses||[])).catch(e=>setError(e.message))},[])
-  const fallback=courseCatalog.map(c=>({...c,desc:'Practical, structured learning experience. Sign in to access enrollment and course details.',status:'Coming soon'}))
   const imageFor=(title,index)=>{
     const t=String(title||'').toLowerCase()
     if(t.includes('marketing')) return courseCatalog[0].image
@@ -161,24 +157,52 @@ function Courses(){
     if(t.includes('graphic')||t.includes('design')) return courseCatalog[4].image
     return courseCatalog[index%courseCatalog.length].image
   }
-  const list=courses.length?courses.map((c,i)=>({id:c.id,title:c.title,desc:c.description||'Practical, structured learning experience. Sign in to access enrollment and course details.',status:c.status,image:imageFor(c.title,i)})):fallback
+  const categoryFor=title=>{
+    const t=String(title||'').toLowerCase()
+    if(t.includes('marketing')) return 'Digital Marketing'
+    if(t.includes('web')||t.includes('development')||t.includes('coding')) return 'Web Development'
+    if(t.includes('graphic')||t.includes('design')) return 'Graphic Design'
+    if(t.includes('content')||t.includes('video')) return 'Content Creation'
+    if(t.includes('business')||t.includes('finance')) return 'Business & Finance'
+    if(t.includes('ai')||t.includes('tech')) return 'AI & Tech'
+    if(t.includes('communication')) return 'Communication'
+    if(t.includes('growth')) return 'Personal Growth'
+    return 'Other'
+  }
+  const list=courses.map((c,i)=>({id:c.id,title:c.title,desc:c.description||'Practical, structured learning experience.',status:c.status,image:imageFor(c.title,i),category:categoryFor(c.title),created_at:c.created_at,price:Number(c.price||0)}))
+    .filter(c=>`${c.title} ${c.desc}`.toLowerCase().includes(query.trim().toLowerCase()))
+    .filter(c=>category==='all'||c.category===category)
+    .sort((a,b)=>sort==='price-low'?a.price-b.price:sort==='price-high'?b.price-a.price:new Date(b.created_at||0)-new Date(a.created_at||0))
   return <Page title="Explore Courses" eyebrow="LEARNING MARKETPLACE" sub="Build practical skills through structured courses, projects and assessments.">
     {error && <div className="notice">{error}</div>}
-    <div className="filterbar"><input placeholder="Search courses..."/><button>All Categories ▾</button><button>Sort ▾</button></div>
-    <div className="listing-grid course-listing">{list.map((c,i)=><article className="list-card course-card" key={c.id||c.title}><Link className="course-image-link" to={c.id?`/courses/${c.id}`:'/login'}><img src={c.image} alt={c.title} loading="lazy"/></Link><div className="course-card-body"><span className="tag">{c.status}</span><h3>{c.title}</h3><p>{c.desc}</p><div className="course-pills"><span>✓ Practical Projects</span><span>✓ Step-by-Step</span><span>✓ Certificate</span></div>{c.id?<BuyButton kind="course" id={c.id} label="Enroll & Pay →"/>:<Link to="/login">View details →</Link>}</div></article>)}</div>
+    <div className="filterbar"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search courses..." aria-label="Search courses"/><select value={category} onChange={e=>setCategory(e.target.value)} aria-label="Filter by category"><option value="all">All Categories</option>{categories.map(x=><option key={x} value={x}>{x}</option>)}</select><select value={sort} onChange={e=>setSort(e.target.value)} aria-label="Sort courses"><option value="newest">Newest</option><option value="price-low">Price: Low to High</option><option value="price-high">Price: High to Low</option></select></div>
+    {!list.length&&!error?<div className="empty">No courses match your filters.</div>:<div className="listing-grid course-listing">{list.map((c,i)=><article className="list-card course-card" key={c.id||c.title}><Link className="course-image-link" to={c.id?`/courses/${c.id}`:'/login'}><img src={c.image} alt={c.title} loading="lazy"/></Link><div className="course-card-body"><span className="tag">{c.status}</span><h3>{c.title}</h3><p>{c.desc}</p><div className="course-pills"><span>✓ Practical Projects</span><span>✓ Step-by-Step</span><span>✓ Certificate</span></div>{c.id?<BuyButton kind="course" id={c.id} label="Enroll & Pay →"/>:<Link to="/login">View details →</Link>}</div></article>)}</div>}
   </Page>
+}
+
+function CourseDetails({id}){
+  const [course,setCourse]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(true)
+  useEffect(()=>{let cancelled=false;(async()=>{try{const r=await api(`/courses/${id}`);if(!cancelled)setCourse(r.course)}catch(e){if(!cancelled)setError(e.message)}finally{if(!cancelled)setLoading(false)}})();return()=>{cancelled=true}},[id])
+  if(loading)return <Page title="Course" eyebrow="COURSE" sub="Loading live course data…"><div className="ceo-loading">Loading…</div></Page>
+  if(error)return <Page title="Course unavailable" eyebrow="COURSE" sub=""><div className="notice">{error}</div></Page>
+  return <Page title={course.title} eyebrow="COURSE DETAILS" sub={course.description||'Practical learning experience.'}><div className="dash-grid"><article><small>PRICE</small><h2>₹{Number(course.price||0).toLocaleString('en-IN')}</h2><p>Published course</p></article><article><small>ENROLLMENT</small><BuyButton kind="course" id={course.id} label="Enroll & Pay →"/></article></div></Page>
 }
 
 function PackagesPage(){return <Page title="Learning Packages" eyebrow="CURATED PATHS" sub="Choose a complete learning path with access to relevant courses, skills and eligible live experiences."><PackageGrid/></Page>}
 function Masterclasses(){return <Page title="Masterclasses" eyebrow="LIVE LEARNING" sub="Learn directly through scheduled live and recorded masterclasses."><MasterGrid/></Page>}
-function Workshops(){return <Page title="Workshops" eyebrow="PRACTICAL EXPERIENCES" sub="Hands-on workshops with schedules, registration, attendance, resources and eligible certificates."><div className="listing-grid">{['Build Your First Digital Portfolio','Client Acquisition Workshop','AI Tools for Creators','Freelancing Launch Workshop','Content Strategy Lab','Business Growth Workshop'].map((x,i)=><article className="list-card" key={x}><div className={`thumb thumb${i%4}`}>WORKSHOP</div><div><span className="tag">Upcoming</span><h3>{x}</h3><p>Schedule, seats, registration and resources are managed through the platform.</p><Link to="/login">View details →</Link></div></article>)}</div></Page>}
+function Workshops(){
+  const [items,setItems]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(true)
+  useEffect(()=>{let cancelled=false;(async()=>{try{const r=await api('/workshops');if(!cancelled)setItems(r.workshops||[])}catch(e){if(!cancelled)setError(e.message)}finally{if(!cancelled)setLoading(false)}})();return()=>{cancelled=true}},[])
+  return <Page title="Workshops" eyebrow="PRACTICAL EXPERIENCES" sub="Hands-on workshops with schedules, registration, attendance, resources and eligible certificates.">{loading?<div className="ceo-loading">Loading live workshops…</div>:error?<div className="notice">{error}</div>:!items.length?<div className="empty">No published workshops are currently available.</div>:<div className="listing-grid">{items.map((x,i)=><article className="list-card" key={x.id}><div className={`thumb thumb${i%4}`}>WORKSHOP</div><div><span className="tag">{x.scheduled_at?'Scheduled':'Upcoming'}</span><h3>{x.title}</h3><p>{x.description||'Workshop details will be available after publication.'}</p><div><b>₹{Number(x.price||0).toLocaleString('en-IN')}</b>{x.seats?` · ${x.seats} seats`:''}</div>{x.price>0?<BuyButton kind="workshop" id={x.id} label="Register & Pay →"/>:<span>Free registration</span>}</div></article>)}</div>}</Page>
+}
 function About(){return <Page title="Skills that move you forward." eyebrow="ABOUT SKILLLINK" sub="SkillLink brings practical learning, projects and opportunity-oriented experiences together in one platform."><div className="about-grid">{[['01','Learn','Structured courses and live learning experiences.'],['02','Build','Projects, assessments and practical progress.'],['03','Grow','Referrals, achievements, certificates and opportunities.']].map(x=><article key={x[0]}><b>{x[0]}</b><h2>{x[1]}</h2><p>{x[2]}</p></article>)}</div></Page>}
 
 function Page({title,eyebrow,sub,children}){return <section className="page-content"><div className="page-head"><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{sub}</p></div>{children}</section>}
 
 function Auth({mode}){
-  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[name,setName]=useState(''),[referral,setReferral]=useState(()=>new URLSearchParams(window.location.search).get('ref')||''),[selectedPackage,setSelectedPackage]=useState('Aarambh'),[busy,setBusy]=useState(false),[msg,setMsg]=useState(''),[showPassword,setShowPassword]=useState(false)
+  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[name,setName]=useState(''),[referral,setReferral]=useState(()=>new URLSearchParams(window.location.search).get('ref')||''),[selectedPackage,setSelectedPackage]=useState(''),[packageOptions,setPackageOptions]=useState([]),[busy,setBusy]=useState(false),[msg,setMsg]=useState(''),[showPassword,setShowPassword]=useState(false)
   const navigate=useNavigate(); const signup=mode==='signup'
+  useEffect(()=>{if(!signup)return;let cancelled=false;(async()=>{try{const r=await api('/packages');const live=r.packages||[];if(!cancelled){setPackageOptions(live);setSelectedPackage(prev=>prev||live[0]?.name||'')}}catch(e){if(!cancelled)setMsg(e.message)}})();return()=>{cancelled=true}},[signup])
   const strength=password.length>=12?'Strong':password.length>=8?'Good':'Use 8+ characters'
   async function submit(e){
     e.preventDefault();setBusy(true);setMsg('')
@@ -208,7 +232,7 @@ function Auth({mode}){
     <form className="auth-card" onSubmit={submit}>
       <div className="auth-logo"><b>✦</b><span>SkillLink</span></div><div className="eyebrow">{signup?'CREATE YOUR ACCOUNT':'SECURE SIGN IN'}</div><h2>{signup?'Join SkillLink':'Login to SkillLink'}</h2><p className="auth-sub">{signup?'Create your account and start learning today.':'Access your courses, progress and SkillLink dashboard.'}</p>
       {signup&&<label>Full name<input required autoComplete="name" placeholder="Your full name" value={name} onChange={e=>setName(e.target.value)}/></label>}
-      {signup&&<label>Choose your package <span>₹99 registration + package fee</span><select value={selectedPackage} onChange={e=>setSelectedPackage(e.target.value)}>{packages.map(p=><option key={p.name} value={p.name}>{p.name} — ₹{(p.price+99).toLocaleString('en-IN')} total</option>)}</select></label>}
+      {signup&&<label>Choose your package <span>₹99 registration + package fee</span><select required disabled={!packageOptions.length} value={selectedPackage} onChange={e=>setSelectedPackage(e.target.value)}>{packageOptions.map(p=><option key={p.id||p.name} value={p.name}>{p.name} — ₹{(Number(p.base_price??p.price??0)+99).toLocaleString('en-IN')} total</option>)}</select></label>}
       {signup&&<label>Referral code <span>optional</span><input autoComplete="off" placeholder="e.g. SL-XXXXXXXX" value={referral} onChange={e=>setReferral(e.target.value.toUpperCase())}/></label>}
       <label>Email address<input required autoComplete="email" type="email" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)}/></label>
       <label>Password<div className="password-wrap"><input required minLength="8" autoComplete={signup?'new-password':'current-password'} type={showPassword?'text':'password'} placeholder="Minimum 8 characters" value={password} onChange={e=>setPassword(e.target.value)}/><button type="button" onClick={()=>setShowPassword(!showPassword)}>{showPassword?'Hide':'Show'}</button></div>{signup&&<small className={`password-strength ${password.length>=8?'ok':''}`}>{strength}</small>}</label>
@@ -286,11 +310,13 @@ function Dashboard({session}){
   return <>{error&&<Page title="Dashboard" eyebrow="SKILLLINK" sub="The dashboard could not load its live data."><div className="notice">{error}</div></Page>}{!error&&data&&<RoleDashboard data={data} onGo={navigate}/>}</>
 }
 
+function CourseRoute(){const {id}=useParams();return <CourseDetails id={id}/>}
+
 export default function App(){
   const [session,setSession]=useState(null),[booting,setBooting]=useState(true)
   useEffect(()=>{const timer=setTimeout(()=>setBooting(false),1900);if(!supabase)return()=>clearTimeout(timer);supabase.auth.getSession().then(({data})=>setSession(data.session));const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>{clearTimeout(timer);subscription.unsubscribe()}},[])
   if(booting)return <LoadingScreen/>
   return <div className="app"><Header session={session}/><Routes>
-    <Route path="/" element={<Home/>}/><Route path="/courses" element={<Courses/>}/><Route path="/packages" element={<PackagesPage/>}/><Route path="/masterclasses" element={<Masterclasses/>}/><Route path="/workshops" element={<Workshops/>}/><Route path="/about" element={<About/>}/><Route path="/login" element={<Auth mode="login"/>}/><Route path="/signup" element={<Auth mode="signup"/>}/><Route path="/ceo" element={<CEOControlCenter session={session}/>}/><Route path="/dashboard" element={<Dashboard session={session}/>}/><Route path="/referrals" element={<Referrals session={session}/>}/><Route path="*" element={<Navigate to="/" replace/>}/>
+    <Route path="/" element={<Home/>}/><Route path="/courses" element={<Courses/>}/><Route path="/courses/:id" element={<CourseRoute/>}/><Route path="/packages" element={<PackagesPage/>}/><Route path="/masterclasses" element={<Masterclasses/>}/><Route path="/workshops" element={<Workshops/>}/><Route path="/about" element={<About/>}/><Route path="/login" element={<Auth mode="login"/>}/><Route path="/signup" element={<Auth mode="signup"/>}/><Route path="/ceo" element={<CEOControlCenter session={session}/>}/><Route path="/dashboard" element={<Dashboard session={session}/>}/><Route path="/referrals" element={<Referrals session={session}/>}/><Route path="*" element={<Navigate to="/" replace/>}/>
   </Routes><footer className="site-footer">© {new Date().getFullYear()} SkillLink · Learn. Build. Grow.</footer></div>
 }
